@@ -8,7 +8,7 @@ from typing import *
 from math import cos, sin, pi as π, sqrt
 from numpy import single
 from geometry import Vector3, Quaternion, Orientation
-from bsor.Bsor import Bsor, Frame
+from Bsor import Bsor, Frame
 
 
 def lerp_unclamped(a, b, t):
@@ -44,10 +44,6 @@ def move_towards_head(start, end, noteInverseWorldRotation, t, headPseudoLocalPo
 
 def quat_slerp(p, q, t):
     return Quaternion.Slerp(p, q, t)
-
-
-def look_rotation(forwards, up):
-    return Quaternion.from_forward_and_up(forwards, up)
 
 
 class NoteData:
@@ -164,19 +160,19 @@ class MovementData:
 
     def get_rotation_angle(self, cut_direction):
         if cut_direction == NoteData.CutDirection.Up:
-            return -180
+            return 180
         if cut_direction == NoteData.CutDirection.Down:
             return 0
         if cut_direction == NoteData.CutDirection.Left:
-            return -90
+            return 270
         if cut_direction == NoteData.CutDirection.Right:
             return 90
         if cut_direction == NoteData.CutDirection.UpLeft:
-            return -135
+            return 225
         if cut_direction == NoteData.CutDirection.UpRight:
             return 135
         if cut_direction == NoteData.CutDirection.DownLeft:
-            return -45
+            return 315
         if cut_direction == NoteData.CutDirection.DownRight:
             return 45
         return 0
@@ -210,12 +206,11 @@ def create_note_orientation_updater(map: Map, note: Note, bsor: Bsor):
     gravity = movement_data.jump_gravity
     start_vertical_velocity = gravity * movement_data.jump_duration / 2
     y_avoidance = note_data.flip_y_side * 0.15 if note_data.flip_y_side <= 0 else note_data.flip_y_side * 0.45
-
     end_rotation = Quaternion.from_Euler(0, 0, movement_data.end_rotation)  # ###
-    euler_angles = end_rotation.to_Euler()
+    euler_angles = Vector3(0, 0, movement_data.end_rotation)
     if note_data.gameplay_type == NoteData.GameplayType.NORMAL:
         # abs and % are in opposite order to that of the code since % is different in python vs C#
-        index = abs(round(note_data.time * 10 + jump_end_pos.x * 2 + jump_end_pos.y * 2)) % NUM_RANDOM_ROTATIONS
+        index = abs(int(round(note_data.time * 10 + jump_end_pos.x * 2 + jump_end_pos.y * 2))) % NUM_RANDOM_ROTATIONS
         euler_angles += RANDOM_ROTATIONS[index] * 20
     middle_rotation = Quaternion.from_Euler(euler_angles.x, euler_angles.y, euler_angles.z)
 
@@ -258,18 +253,19 @@ def create_note_orientation_updater(map: Map, note: Note, bsor: Bsor):
 
         if percentage_of_jump < 0.5:
             if percentage_of_jump >= 0.125:
-                a = Quaternion.Slerp(middle_rotation, end_rotation, sin((percentage_of_jump - 0.125) * π * 2))
+                a = Quaternion.slerp(middle_rotation, end_rotation, sin((percentage_of_jump - 0.125) * π * 2))
             else:
-                a = Quaternion.Slerp(start_rotation, middle_rotation, sin((percentage_of_jump * π * 4)))
+                a = Quaternion.slerp(start_rotation, middle_rotation, sin((percentage_of_jump * π * 4)))
 
             if rotate_towards_player:
                 head_pseudo_location = Vector3(frame.head.x, frame.head.y, frame.head.z)  # ###
                 head_pseudo_location.y = lerp(head_pseudo_location.y, local_pos.y, 0.8)
                 normalized = (local_pos - head_pseudo_location.rotate(inverse_world_rotation)).normal()
                 rotated_object_up = Vector3(0, 1, 0).rotate(object.rotation)
+                
                 vector3 = rotated_object_up.rotate(world_to_player_rotation)
-                b = look_rotation(normalized, vector3.rotate(inverse_world_rotation))
-                object.rotation = Quaternion.Lerp(a, b, percentage_of_jump * 2)
+                b = Quaternion.look_rotation(normalized, vector3.rotate(inverse_world_rotation))
+                object.rotation = Quaternion.slerp(a, b, percentage_of_jump * 2)
 
             else:
                 object.rotation = a
